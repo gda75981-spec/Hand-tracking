@@ -3,246 +3,442 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HandSpace | Hand Control</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>HandSpace 3D</title>
 <style>
 *{box-sizing:border-box}
 body{
   margin:0;background:#080d1b;color:#eef4ff;
-  font-family:system-ui,Arial,sans-serif;text-align:center;
+  font-family:system-ui,Arial,sans-serif;
 }
-header{padding:24px 12px}
+header{text-align:center;padding:20px 10px}
 h1{
-  font-size:clamp(36px,8vw,64px);margin:0;
-  background:linear-gradient(90deg,#62e7ff,#aa8cff);
-  color:transparent;background-clip:text;
+  margin:0;font-size:clamp(35px,8vw,58px);
+  background:linear-gradient(90deg,#62e7ff,#a58bff);
+  background-clip:text;color:transparent;
 }
 p{color:#aab7d0}
-main{width:min(900px,94%);margin:auto}
+main{width:min(1000px,96%);margin:auto}
 .panel{
-  padding:16px;background:#111a2e;border:1px solid #293957;
-  border-radius:20px;margin-bottom:16px;
+  background:#111a2e;border:1px solid #293957;
+  border-radius:18px;padding:14px;margin-bottom:14px;
 }
-#stage{
-  height: min(60vh,440px);min-height:280px;position:relative;
-  overflow:hidden;border-radius:15px;border:1px solid #354568;
-  background-color:#0b1225;
-  background-image:linear-gradient(#29395755 1px,transparent 1px),
-  linear-gradient(90deg,#29395755 1px,transparent 1px);
-  background-size:30px 30px;
+#viewport{
+  width:100%;height:min(60vh,520px);min-height:300px;
+  border-radius:14px;overflow:hidden;position:relative;
+  background:radial-gradient(ellipse,#19294a,#060a14);
 }
-#star{
-  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
-  width:76px;height:76px;border-radius:50%;
-  display:grid;place-items:center;font-size:40px;
-  background:radial-gradient(circle at 35% 30%,#bafaff,#429dff 55%,#7957ee);
-  box-shadow:0 0 35px #62e7ff99;pointer-events:none;
-}
-#star.grab{
-  box-shadow:0 0 0 12px #62e7ff55,0 0 65px #62e7ff;
-}
+canvas{display:block;width:100%;height:100%;touch-action:pan-y}
+#status{color:#62e7ff;margin:12px 0}
 button{
-  width:100%;padding:14px;margin-top:10px;border:0;
-  border-radius:12px;font-size:16px;font-weight:bold;cursor:pointer;
+  width:100%;padding:14px;margin:5px 0;
+  border:0;border-radius:12px;font-size:16px;
+  font-weight:bold;cursor:pointer;
 }
-#start{background:linear-gradient(90deg,#62e7ff,#aa8cff);color:#080d1b}
+#start{background:linear-gradient(90deg,#62e7ff,#a58bff);color:#080d1b}
 #stop{background:#293957;color:white}
-#status{margin:14px 0;color:#62e7ff}
-video{
-  width:min(100%,360px);border-radius:12px;
-  transform:scaleX(-1);display:none;margin:12px auto;
-}
-.note{font-size:13px;line-height:1.6}
+#help{font-size:13px;color:#aab7d0;line-height:1.7}
+@media(max-width:600px){#viewport{height:48vh;min-height:290px}}
 </style>
 </head>
 <body>
 <header>
-  <h1>HandSpace</h1>
-  <p>Move your real hand. Control the virtual world.</p>
+  <h1>HandSpace 3D</h1>
+  <p>Your real hands control a virtual 3D world.</p>
 </header>
 
 <main>
-  <section class="panel">
-    <h3>✦ Hand-controlled playground</h3>
-    <div id="stage">
-      <div id="star">✦</div>
-    </div>
-    <div id="status">Camera is off</div>
-    <button id="start">📷 Enable Camera & Start</button>
-    <button id="stop">Stop Camera</button>
-    <video id="video" autoplay playsinline muted></video>
-    <p class="note">
-      Show your hand to the camera. Move your index finger to steer the
-      star. Pinch your thumb and index finger to make it glow.
-    </p>
-  </section>
-
-  <section class="panel">
-    <h3>How to use</h3>
-    <p>1. Tap Enable Camera & Start.</p>
-    <p>2. Allow camera access.</p>
-    <p>3. Hold one hand in front of your camera.</p>
-    <p>4. Move your index finger to move the star.</p>
-    <p>5. Pinch your thumb and index finger together.</p>
-    <p class="note">
-      Camera frames are processed locally by the hand-tracking library.
-      This page does not intentionally record or upload video.
-    </p>
-  </section>
+<section class="panel">
+  <h3>✦ 3D Hand Playground</h3>
+  <div id="viewport"></div>
+  <div id="status">Camera is off.</div>
+  <button id="start">📷 Enable Camera</button>
+  <button id="stop">Stop Camera</button>
+  <p id="help">
+    ✋ Show up to two hands.<br>
+    🖐️ Your fingers are tracked in 3D.<br>
+    🤏 Pinch near the cube to grab it.<br>
+    ✋ Open your fingers to release the cube.
+  </p>
+</section>
 </main>
 
+<video id="video" autoplay playsinline muted
+style="position:fixed;width:1px;height:1px;opacity:0;pointer-events:none"></video>
+
 <script type="module">
-const video = document.getElementById("video");
-const star = document.getElementById("star");
-const stage = document.getElementById("stage");
-const status = document.getElementById("status");
-const startButton = document.getElementById("start");
-const stopButton = document.getElementById("stop");
+import * as THREE from
+'https://cdn.jsdelivr.net/npm/three@0.166.1/build/three.module.js';
 
-let cameraStream = null;
-let tracker = null;
-let active = false;
-let lastFrame = -1;
-let x = 0.5;
-let y = 0.5;
+const viewport=document.getElementById('viewport');
+const video=document.getElementById('video');
+const status=document.getElementById('status');
 
-function setStatus(message) {
-  status.textContent = message;
+const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+viewport.appendChild(renderer.domElement);
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x080d1b);
+
+const camera=new THREE.PerspectiveCamera(45,1,0.1,100);
+camera.position.set(0,0,10);
+
+scene.add(new THREE.HemisphereLight(0xbbeeff,0x182044,2));
+
+const light=new THREE.DirectionalLight(0xffffff,2);
+light.position.set(-3,5,8);
+scene.add(light);
+
+const grid=new THREE.GridHelper(12,24,0x355077,0x1c2a49);
+grid.position.y=-2.2;
+scene.add(grid);
+
+// The cube
+const cube=new THREE.Mesh(
+  new THREE.BoxGeometry(1,1,1),
+  new THREE.MeshStandardMaterial({
+    color:0x785cff,
+    emissive:0x21105b,
+    emissiveIntensity:0.5,
+    metalness:0.2,
+    roughness:0.25
+  })
+);
+cube.position.set(0,-0.2,0);
+scene.add(cube);
+
+const edges=new THREE.LineSegments(
+  new THREE.EdgesGeometry(cube.geometry),
+  new THREE.LineBasicMaterial({color:0xaffaff})
+);
+cube.add(edges);
+
+// MediaPipe's hand landmark connections
+const chains=[
+  [0,1,2,3,4],
+  [0,5,6,7,8],
+  [0,9,10,11,12],
+  [0,13,14,15,16],
+  [0,17,18,19,20],
+  [5,9,13,17,5]
+];
+
+const connections=[];
+for(const chain of chains){
+  for(let i=0;i<chain.length-1;i++){
+    connections.push([chain[i],chain[i+1]]);
+  }
 }
 
-function stopCamera() {
-  active = false;
+function makeHand(color){
+  const group=new THREE.Group();
+  scene.add(group);
 
-  if (cameraStream) {
-    cameraStream.getTracks().forEach(track => track.stop());
-    cameraStream = null;
+  const material=new THREE.MeshStandardMaterial({
+    color:color,
+    emissive:color,
+    emissiveIntensity:0.35,
+    roughness:0.3
+  });
+
+  const joints=[];
+  const bones=[];
+
+  const jointGeometry=new THREE.SphereGeometry(0.065,12,10);
+
+  for(let i=0;i<21;i++){
+    const joint=new THREE.Mesh(jointGeometry,material);
+    group.add(joint);
+    joints.push(joint);
   }
 
-  video.srcObject = null;
-  video.style.display = "none";
-  star.classList.remove("grab");
-  startButton.disabled = false;
-  setStatus("Camera is off");
-}
-
-function distance(a, b) {
-  return Math.hypot(a.x - b.x, a.y - b.y);
-}
-
-function animate() {
-  if (!active || !tracker) return;
-
-  if (video.readyState >= 2 && video.currentTime !== lastFrame) {
-    lastFrame = video.currentTime;
-
-    const result = tracker.detectForVideo(video, performance.now());
-    const hand = result.landmarks?.[0];
-
-    if (hand) {
-      // Index fingertip is landmark 8.
-      const targetX = 1 - hand[8].x;
-      const targetY = hand[8].y;
-
-      // Smooth the movement so it feels less shaky.
-      x += (targetX - x) * 0.35;
-      y += (targetY - y) * 0.35;
-
-      const bounds = stage.getBoundingClientRect();
-      const padding = 40;
-
-      star.style.left =
-        (padding + x * Math.max(0, bounds.width - padding * 2)) + "px";
-
-      star.style.top =
-        (padding + y * Math.max(0, bounds.height - padding * 2)) + "px";
-
-      // Thumb tip = landmark 4, index tip = landmark 8.
-      const pinching = distance(hand[4], hand[8]) < 0.055;
-      star.classList.toggle("grab", pinching);
-
-      setStatus(pinching
-        ? "🤏 Pinching! Star grabbed"
-        : "✋ Hand detected — move to steer!");
-    } else {
-      star.classList.remove("grab");
-      setStatus("Looking for your hand...");
-    }
+  for(const [a,b] of connections){
+    const bone=new THREE.Mesh(
+      new THREE.CylinderGeometry(0.025,0.04,1,8),
+      material
+    );
+    group.add(bone);
+    bones.push({mesh:bone,a,b});
   }
 
-  requestAnimationFrame(animate);
+  // Palm visualization
+  const palm=new THREE.Mesh(
+    new THREE.SphereGeometry(0.22,16,12),
+    new THREE.MeshStandardMaterial({
+      color:color,
+      transparent:true,
+      opacity:0.55
+    })
+  );
+  group.add(palm);
+
+  return {group,joints,bones,palm};
 }
 
-async function startCamera() {
-  startButton.disabled = true;
-  setStatus("Loading hand tracking...");
+const hands=[
+  makeHand(0x62e7ff),
+  makeHand(0xff83d4)
+];
 
-  try {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      throw new Error("Camera needs HTTPS. Open your GitHub Pages website.");
+hands.forEach(hand=>hand.group.visible=false);
+
+function toWorld(point){
+  return new THREE.Vector3(
+    (0.5-point.x)*7,
+    (0.5-point.y)*4.5,
+    0
+  );
+}
+
+function updateBone(mesh,a,b){
+  const direction=b.clone().sub(a);
+  mesh.position.copy(a).add(b).multiplyScalar(0.5);
+  mesh.scale.set(1,direction.length(),1);
+  mesh.quaternion.setFromUnitVectors(
+    new THREE.Vector3(0,1,0),
+    direction.normalize()
+  );
+}
+
+function updateHand(hand,landmarks){
+  const points=landmarks.map(toWorld);
+
+  points.forEach((point,i)=>{
+    hand.joints[i].position.copy(point);
+  });
+
+  hand.bones.forEach(bone=>{
+    updateBone(
+      bone.mesh,
+      points[bone.a],
+      points[bone.b]
+    );
+  });
+
+  hand.palm.position.copy(
+    points[0].clone().add(points[9]).multiplyScalar(0.5)
+  );
+
+  hand.group.visible=true;
+}
+
+let tracker=null;
+let stream=null;
+let running=false;
+let lastFrame=-1;
+let grabbed=false;
+let grabOffset=new THREE.Vector3();
+
+function pinchDistance(hand){
+  const thumb=hand[4];
+  const index=hand[8];
+
+  return Math.hypot(
+    thumb.x-index.x,
+    thumb.y-index.y
+  );
+}
+
+function clamp(value,min,max){
+  return Math.max(min,Math.min(max,value));
+}
+
+function updateCube(landmarks){
+  const pinching=pinchDistance(landmarks)<0.055;
+  const fingertip=toWorld(landmarks[8]);
+
+  const nearCube=
+    Math.abs(fingertip.x-cube.position.x)<1.2 &&
+    Math.abs(fingertip.y-cube.position.y)<1.2;
+
+  if(pinching && nearCube && !grabbed){
+    grabbed=true;
+    grabOffset.copy(cube.position).sub(fingertip);
+  }
+
+  if(grabbed){
+    if(pinching){
+      cube.position.x=clamp(
+        fingertip.x+grabOffset.x,-3.3,3.3
+      );
+
+      cube.position.y=clamp(
+        fingertip.y+grabOffset.y,-1.5,1.7
+      );
+
+      status.textContent='🤏 Cube grabbed!';
+      return;
     }
 
-    // Load Google's MediaPipe hand tracking.
-    const vision = await import(
-      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14"
+    grabbed=false;
+    status.textContent='Cube released!';
+  }
+}
+
+async function trackingLoop(){
+  if(!running || !tracker)return;
+
+  if(video.readyState>=2 && video.currentTime!==lastFrame){
+    lastFrame=video.currentTime;
+
+    const result=tracker.detectForVideo(
+      video,performance.now()
     );
 
-    const files = await vision.FilesetResolver.forVisionTasks(
-      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
-    );
+    const detected=result.landmarks||[];
 
-    tracker = await vision.HandLandmarker.createFromOptions(files, {
-      baseOptions: {
-        modelAssetPath:
-          "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
-        delegate: "GPU"
-      },
-      runningMode: "VIDEO",
-      numHands: 1,
-      minHandDetectionConfidence: 0.55,
-      minHandPresenceConfidence: 0.5,
-      minTrackingConfidence: 0.5
-    });
-
-    // Browser will ask permission here.
-    cameraStream = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: {
-        facingMode: "user",
-        width: { ideal: 640 },
-        height: { ideal: 480 }
+    hands.forEach((hand,i)=>{
+      if(detected[i]){
+        updateHand(hand,detected[i]);
+      }else{
+        hand.group.visible=false;
       }
     });
 
-    video.srcObject = cameraStream;
-    await video.play();
-    video.style.display = "block";
+    if(detected.length){
+      let activePinch=false;
 
-    active = true;
-    setStatus("Camera on! Show your hand.");
-    requestAnimationFrame(animate);
+      for(const landmarks of detected){
+        if(pinchDistance(landmarks)<0.055){
+          activePinch=true;
+          updateCube(landmarks);
+          break;
+        }
+      }
 
-  } catch (error) {
-    console.error(error);
-    if (cameraStream) {
-      cameraStream.getTracks().forEach(track => track.stop());
-      cameraStream = null;
+      if(!activePinch){
+        grabbed=false;
+        status.textContent=
+          detected.length+' hand(s) detected';
+      }
+    }else{
+      grabbed=false;
+      status.textContent='Looking for your hands...';
+    }
+  }
+
+  requestAnimationFrame(trackingLoop);
+}
+
+async function startCamera(){
+  document.getElementById('start').disabled=true;
+  status.textContent='Loading hand tracking...';
+
+  try{
+    if(!navigator.mediaDevices?.getUserMedia){
+      throw new Error(
+        'Camera access requires HTTPS. Use GitHub Pages.'
+      );
     }
 
-    setStatus(error.name === "NotAllowedError"
-      ? "Camera permission denied. Allow camera access in browser settings."
-      : "Could not start: " + error.message);
+    const vision=await import(
+      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14'
+    );
 
-    startButton.disabled = false;
+    const files=await vision.FilesetResolver.forVisionTasks(
+      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
+    );
+
+    tracker=await vision.HandLandmarker.createFromOptions(
+      files,
+      {
+        baseOptions:{
+          modelAssetPath:
+          'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
+          delegate:'GPU'
+        },
+        runningMode:'VIDEO',
+        numHands:2,
+        minHandDetectionConfidence:0.55,
+        minHandPresenceConfidence:0.5,
+        minTrackingConfidence:0.5
+      }
+    );
+
+    stream=await navigator.mediaDevices.getUserMedia({
+      audio:false,
+      video:{
+        facingMode:'user',
+        width:{ideal:640},
+        height:{ideal:480}
+      }
+    });
+
+    video.srcObject=stream;
+    await video.play();
+
+    running=true;
+    status.textContent='Camera on! Show your hands.';
+    requestAnimationFrame(trackingLoop);
+
+  }catch(error){
+    console.error(error);
+
+    if(stream){
+      stream.getTracks().forEach(track=>track.stop());
+      stream=null;
+    }
+
+    status.textContent=
+      'Could not start camera: '+error.message;
+
+  }finally{
+    document.getElementById('start').disabled=false;
   }
 }
 
-startButton.addEventListener("click", startCamera);
-stopButton.addEventListener("click", stopCamera);
+function stopCamera(){
+  running=false;
+  grabbed=false;
 
-window.addEventListener("pagehide", () => {
-  active = false;
-  if (cameraStream) {
-    cameraStream.getTracks().forEach(track => track.stop());
+  if(stream){
+    stream.getTracks().forEach(track=>track.stop());
+    stream=null;
+  }
+
+  video.srcObject=null;
+  hands.forEach(hand=>hand.group.visible=false);
+
+  status.textContent='Camera is off.';
+  document.getElementById('start').disabled=false;
+}
+
+document.getElementById('start')
+  .addEventListener('click',startCamera);
+
+document.getElementById('stop')
+  .addEventListener('click',stopCamera);
+
+function resize(){
+  const width=viewport.clientWidth;
+  const height=viewport.clientHeight;
+
+  renderer.setSize(width,height,false);
+  camera.aspect=width/height;
+  camera.updateProjectionMatrix();
+}
+
+new ResizeObserver(resize).observe(viewport);
+resize();
+
+function render(){
+  requestAnimationFrame(render);
+
+  if(!grabbed){
+    cube.rotation.x+=0.002;
+    cube.rotation.y+=0.004;
+  }
+
+  renderer.render(scene,camera);
+}
+
+render();
+
+window.addEventListener('pagehide',()=>{
+  running=false;
+  if(stream){
+    stream.getTracks().forEach(track=>track.stop());
   }
 });
 </script>
