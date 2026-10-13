@@ -3,65 +3,126 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>HandSpace — Face & Hand Tracking</title>
+<title>HandSpace 3D</title>
+
 <style>
-* { box-sizing:border-box }
+* { box-sizing: border-box; }
+
 body {
-  margin:0; overflow:hidden; background:#080b11;
-  color:white; font-family:system-ui,sans-serif;
+  margin: 0;
+  overflow: hidden;
+  background: #080b11;
+  color: white;
+  font-family: system-ui, sans-serif;
 }
-#view { position:fixed; inset:0 }
+
+#view {
+  position: fixed;
+  inset: 0;
+}
+
 #camera {
-  position:fixed; inset:0; width:100%; height:100%;
-  object-fit:cover; transform:scaleX(-1); opacity:.17;
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+  opacity: .14;
 }
+
 #panel {
-  position:fixed; z-index:5; top:12px; left:12px;
-  padding:13px; width:min(285px,calc(100vw - 24px));
-  border:1px solid #30394a; border-radius:14px;
-  background:#101722ed;
+  position: fixed;
+  z-index: 5;
+  top: 12px;
+  left: 12px;
+  width: min(290px, calc(100vw - 24px));
+  padding: 13px;
+  border: 1px solid #30394a;
+  border-radius: 14px;
+  background: #101722ed;
 }
-h2 { font-size:18px; margin:0 0 5px }
-p { color:#b1bdcc; font-size:12px; margin:5px 0 12px }
+
+h2 {
+  font-size: 18px;
+  margin: 0 0 5px;
+}
+
+p {
+  color: #b1bdcc;
+  font-size: 12px;
+  margin: 5px 0 12px;
+}
+
 button {
-  border:0; border-radius:8px; padding:10px 13px;
-  background:#4387ef; color:white; font-weight:bold;
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 13px;
+  background: #4387ef;
+  color: white;
+  font-weight: bold;
 }
-button:disabled { opacity:.5 }
-#stop { background:#354154; margin-left:5px }
-#status { margin-top:9px; color:#8af2c1; font-size:12px }
+
+button:disabled { opacity: .5; }
+#stop { background: #354154; margin-left: 5px; }
+
+#status {
+  margin-top: 9px;
+  color: #8af2c1;
+  font-size: 12px;
+}
+
 #stats {
-  position:fixed; bottom:12px; left:12px; z-index:5;
-  border-radius:8px; padding:8px 10px;
-  background:#101722e8; font:12px monospace;
+  position: fixed;
+  bottom: 12px;
+  left: 12px;
+  z-index: 5;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #101722e8;
+  font: 12px monospace;
 }
+
 #hint {
-  position:fixed; bottom:12px; right:12px; z-index:5;
-  max-width:160px; text-align:right; color:#b6c5d8;
-  font-size:11px;
+  position: fixed;
+  bottom: 12px;
+  right: 12px;
+  z-index: 5;
+  max-width: 160px;
+  text-align: right;
+  color: #b6c5d8;
+  font-size: 11px;
+}
+
+@media (max-width: 480px) {
+  #panel { padding: 11px; }
 }
 </style>
 </head>
+
 <body>
 <video id="camera" autoplay playsinline muted></video>
 <div id="view"></div>
 
 <div id="panel">
-  <h2>✋ HandSpace</h2>
-  <p>Real-time 3D hand and face landmark tracking. Your camera is processed in your browser.</p>
+  <h2>✋ HandSpace 3D</h2>
+  <p>Real-time 3D hand and face tracking, optimized for mobile.</p>
   <button id="start">Start camera</button>
   <button id="stop" disabled>Stop</button>
   <div id="status">Camera stopped</div>
 </div>
+
 <div id="stats">FPS: --</div>
-<div id="hint">Keep your face and hand visible to the camera</div>
+<div id="hint">Show your face and both hands to the camera</div>
 
 <script type="module">
 import * as THREE from
 "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
 
 import {
-  FilesetResolver, HandLandmarker, FaceLandmarker
+  FilesetResolver,
+  HandLandmarker,
+  FaceLandmarker
 } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
 
 const video = document.querySelector("#camera");
@@ -73,234 +134,300 @@ const stopButton = document.querySelector("#stop");
 
 let scene, camera, renderer;
 let handTracker, faceTracker, stream;
-let running = false, busy = false;
-let lastHandTime = 0, lastFaceTime = 0, lastVideoTime = -1;
-let hands = [], face = null;
-let frames = 0, lastFPS = performance.now();
-let handResultsTime = 0, faceResultsTime = 0;
 
-const SKIN = 0xd9a17f;
-const SKIN_LIGHT = 0xf0c09b;
+let running = false;
+let busy = false;
+let lastHandTime = 0;
+let lastFaceTime = 0;
+let lastVideoTime = -1;
+let frames = 0;
+let lastFPS = performance.now();
+
+let hands = [];
+let face = null;
+
+const HAND_INTERVAL = 150;
+const FACE_INTERVAL = 400;
+
 const BONE_LINKS = [
- [0,1],[1,2],[2,3],[3,4],
- [0,5],[5,6],[6,7],[7,8],
- [0,9],[9,10],[10,11],[11,12],
- [0,13],[13,14],[14,15],[15,16],
- [0,17],[17,18],[18,19],[19,20],
- [5,9],[9,13],[13,17]
+  [0,1],[1,2],[2,3],[3,4],
+  [0,5],[5,6],[6,7],[7,8],
+  [0,9],[9,10],[10,11],[11,12],
+  [0,13],[13,14],[14,15],[15,16],
+  [0,17],[17,18],[18,19],[19,20],
+  [5,9],[9,13],[13,17]
 ];
 
 const FACE_OUTLINE = [
- 10,338,297,332,284,251,389,356,454,323,361,288,
- 397,365,379,378,400,377,152,148,176,149,150,136,
- 172,58,132,93,234,127,162,21,54,103,67,109,10
+  10,338,297,332,284,251,389,356,454,323,361,288,
+  397,365,379,378,400,377,152,148,176,149,150,136,
+  172,58,132,93,234,127,162,21,54,103,67,109,10
 ];
+
 const LEFT_EYE = [33,160,158,133,153,144,33];
 const RIGHT_EYE = [362,385,387,263,373,380,362];
-const MOUTH = [61,185,40,39,37,0,267,269,270,409,291,
- 375,321,405,314,17,84,181,91,146,61];
+const MOUTH = [
+  61,185,40,39,37,0,267,269,270,409,291,
+  375,321,405,314,17,84,181,91,146,61
+];
 const NOSE = [168,6,197,195,5,4,1,19,94];
+
+const axis = new THREE.Vector3(0, 1, 0);
+const dummy = new THREE.Object3D();
 
 function initScene() {
   scene = new THREE.Scene();
   scene.background = new THREE.Color("#080b11");
 
   camera = new THREE.PerspectiveCamera(
-    50, innerWidth / innerHeight, .1, 100
+    50,
+    innerWidth / innerHeight,
+    0.1,
+    100
   );
-  camera.position.set(0,0,9);
+
+  camera.position.set(0, 0, 9);
 
   renderer = new THREE.WebGLRenderer({
-    antialias:false, powerPreference:"high-performance"
+    antialias: false,
+    powerPreference: "high-performance"
   });
+
   renderer.setPixelRatio(1);
-  renderer.setSize(innerWidth,innerHeight);
+  renderer.setSize(innerWidth, innerHeight);
   view.appendChild(renderer.domElement);
 
-  scene.add(new THREE.HemisphereLight(0xffffff,0x655044,2.2));
+  scene.add(
+    new THREE.HemisphereLight(0xffffff, 0x655044, 2.2)
+  );
 
-  const light = new THREE.DirectionalLight(0xffdfc4,2.0);
-  light.position.set(-3,5,7);
+  const light = new THREE.DirectionalLight(0xffdfc4, 2);
+  light.position.set(-3, 5, 7);
   scene.add(light);
 
-  // Reuse one sphere geometry for all hand joints.
-  const jointGeo = new THREE.SphereGeometry(.075,8,6);
-  const jointMat = new THREE.MeshStandardMaterial({
-    color:SKIN, roughness:.72
+  // Shared geometry for all 42 hand joints.
+  const jointGeometry = new THREE.SphereGeometry(0.075, 7, 5);
+  const jointMaterial = new THREE.MeshStandardMaterial({
+    color: 0xd9a17f,
+    roughness: 0.75
   });
-  const joints = new THREE.InstancedMesh(jointGeo,jointMat,21);
-  joints.count = 0;
-  scene.add(joints);
-  window.joints = joints;
 
-  // Reuse one cylinder geometry for all hand bones.
-  const boneGeo = new THREE.CylinderGeometry(.043,.055,1,6,1);
-  const boneMat = new THREE.MeshStandardMaterial({
-    color:SKIN_LIGHT, roughness:.8
-  });
-  const bones = new THREE.InstancedMesh(
-    boneGeo,boneMat,BONE_LINKS.length
+  const joints = new THREE.InstancedMesh(
+    jointGeometry,
+    jointMaterial,
+    42
   );
-  bones.count = 0;
-  scene.add(bones);
-  window.bones = bones;
 
-  // Face landmark lines, rendered as one lightweight object.
+  joints.count = 0;
+  joints.frustumCulled = false;
+  scene.add(joints);
+  window.handJoints = joints;
+
+  // Shared geometry for bones on both hands.
+  const boneGeometry = new THREE.CylinderGeometry(
+    0.043, 0.055, 1, 6, 1
+  );
+
+  const boneMaterial = new THREE.MeshStandardMaterial({
+    color: 0xf0c09b,
+    roughness: 0.8
+  });
+
+  const bones = new THREE.InstancedMesh(
+    boneGeometry,
+    boneMaterial,
+    BONE_LINKS.length * 2
+  );
+
+  bones.count = 0;
+  bones.frustumCulled = false;
+  scene.add(bones);
+  window.handBones = bones;
+
+  // One lightweight object for facial feature lines.
   const faceLines = new THREE.LineSegments(
     new THREE.BufferGeometry(),
     new THREE.LineBasicMaterial({
-      color:0xf2c6a8, transparent:true, opacity:.9
+      color: 0xf2c6a8,
+      transparent: true,
+      opacity: 0.9
     })
   );
+
   faceLines.frustumCulled = false;
   scene.add(faceLines);
   window.faceLines = faceLines;
 
-  window.addEventListener("resize",resize);
+  window.addEventListener("resize", resize);
 }
 
 function resize() {
   if (!renderer) return;
-  camera.aspect = innerWidth/innerHeight;
+
+  camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth,innerHeight);
   renderer.setPixelRatio(1);
+  renderer.setSize(innerWidth, innerHeight);
 }
 
 function handPosition(p) {
   return new THREE.Vector3(
-    (.5-p.x)*7.2,
-    (.5-p.y)*4.7,
-    THREE.MathUtils.clamp(-p.z*2,-1,1)
+    (0.5 - p.x) * 7.2,
+    (0.5 - p.y) * 4.7,
+    THREE.MathUtils.clamp(-p.z * 2, -1, 1)
   );
-}
-
-const dummy = new THREE.Object3D();
-const axis = new THREE.Vector3(0,1,0);
-
-function drawHands() {
-  const points = hands[0];
-  const joints = window.joints;
-  const bones = window.bones;
-
-  if (!points) {
-    joints.count = 0;
-    bones.count = 0;
-    return;
-  }
-
-  const mapped = points.map(handPosition);
-
-  for (let i=0;i<mapped.length;i++) {
-    dummy.position.copy(mapped[i]);
-    dummy.scale.setScalar(i===0 ? 1.15 : 1);
-    dummy.updateMatrix();
-    joints.setMatrixAt(i,dummy.matrix);
-  }
-  joints.count = mapped.length;
-  joints.instanceMatrix.needsUpdate = true;
-
-  for (let i=0;i<BONE_LINKS.length;i++) {
-    const [a,b] = BONE_LINKS[i];
-    const start = mapped[a], end = mapped[b];
-    const delta = new THREE.Vector3().subVectors(end,start);
-    const length = delta.length();
-
-    dummy.position.copy(start).add(end).multiplyScalar(.5);
-    dummy.quaternion.setFromUnitVectors(axis,delta.normalize());
-    dummy.scale.set(1,length,1);
-    dummy.updateMatrix();
-    bones.setMatrixAt(i,dummy.matrix);
-  }
-  bones.count = BONE_LINKS.length;
-  bones.instanceMatrix.needsUpdate = true;
 }
 
 function facePosition(p) {
   return new THREE.Vector3(
-    (.5-p.x)*7.2,
-    (.5-p.y)*4.7,
-    .2- p.z*1.3
+    (0.5 - p.x) * 7.2,
+    (0.5 - p.y) * 4.7,
+    0.2 - p.z * 1.3
   );
+}
+
+function drawHands() {
+  const joints = window.handJoints;
+  const bones = window.handBones;
+
+  let jointIndex = 0;
+  let boneIndex = 0;
+
+  for (const landmarks of hands.slice(0, 2)) {
+    const mapped = landmarks.map(handPosition);
+
+    for (const point of mapped) {
+      dummy.position.copy(point);
+      dummy.scale.setScalar(1);
+      dummy.quaternion.identity();
+      dummy.updateMatrix();
+
+      joints.setMatrixAt(jointIndex++, dummy.matrix);
+    }
+
+    for (const [a, b] of BONE_LINKS) {
+      const from = mapped[a];
+      const to = mapped[b];
+
+      const delta = new THREE.Vector3().subVectors(to, from);
+      const length = delta.length();
+
+      dummy.position.copy(from).add(to).multiplyScalar(0.5);
+      dummy.quaternion.setFromUnitVectors(
+        axis,
+        delta.normalize()
+      );
+      dummy.scale.set(1, length, 1);
+      dummy.updateMatrix();
+
+      bones.setMatrixAt(boneIndex++, dummy.matrix);
+    }
+  }
+
+  joints.count = jointIndex;
+  bones.count = boneIndex;
+
+  joints.instanceMatrix.needsUpdate = true;
+  bones.instanceMatrix.needsUpdate = true;
 }
 
 function drawFace() {
   const object = window.faceLines;
+
   if (!face || !face.length) {
-    object.geometry.setDrawRange(0,0);
+    object.geometry.setDrawRange(0, 0);
     return;
   }
 
-  const paths = [FACE_OUTLINE,LEFT_EYE,RIGHT_EYE,MOUTH,NOSE];
-  const coords = [];
+  const paths = [
+    FACE_OUTLINE,
+    LEFT_EYE,
+    RIGHT_EYE,
+    MOUTH,
+    NOSE
+  ];
+
+  const coordinates = [];
 
   for (const path of paths) {
-    for (let i=0;i<path.length-1;i++) {
-      const a = facePosition(face[path[i]]);
-      const b = facePosition(face[path[i+1]]);
-      coords.push(a.x,a.y,a.z,b.x,b.y,b.z);
+    for (let i = 0; i < path.length - 1; i++) {
+      const from = facePosition(face[path[i]]);
+      const to = facePosition(face[path[i + 1]]);
+
+      coordinates.push(
+        from.x, from.y, from.z,
+        to.x, to.y, to.z
+      );
     }
   }
 
-  const arr = new Float32Array(coords);
   object.geometry.setAttribute(
-    "position",new THREE.BufferAttribute(arr,3)
+    "position",
+    new THREE.Float32BufferAttribute(coordinates, 3)
   );
-  object.geometry.setDrawRange(0,coords.length/3);
-  object.geometry.attributes.position.needsUpdate = true;
+
+  object.geometry.setDrawRange(0, coordinates.length / 3);
 }
 
 async function loadModels() {
-  status.textContent = "Loading tracking models...";
+  status.textContent = "Loading hand and face models...";
 
   const vision = await FilesetResolver.forVisionTasks(
     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
   );
 
-  // One hand and one face are lighter than tracking several people.
-  handTracker = await HandLandmarker.createFromOptions(vision,{
-    baseOptions:{
-      modelAssetPath:
-        "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
-      delegate:"GPU"
-    },
-    runningMode:"VIDEO",
-    numHands:1,
-    minHandDetectionConfidence:.5,
-    minHandPresenceConfidence:.5,
-    minTrackingConfidence:.5
-  });
+  handTracker = await HandLandmarker.createFromOptions(
+    vision,
+    {
+      baseOptions: {
+        modelAssetPath:
+          "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+        delegate: "GPU"
+      },
+      runningMode: "VIDEO",
+      numHands: 2,
+      minHandDetectionConfidence: 0.5,
+      minHandPresenceConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    }
+  );
 
-  faceTracker = await FaceLandmarker.createFromOptions(vision,{
-    baseOptions:{
-      modelAssetPath:
-        "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-      delegate:"GPU"
-    },
-    runningMode:"VIDEO",
-    numFaces:1,
-    outputFaceBlendshapes:false,
-    outputFacialTransformationMatrixes:false
-  });
+  faceTracker = await FaceLandmarker.createFromOptions(
+    vision,
+    {
+      baseOptions: {
+        modelAssetPath:
+          "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+        delegate: "GPU"
+      },
+      runningMode: "VIDEO",
+      numFaces: 1,
+      outputFaceBlendshapes: false,
+      outputFacialTransformationMatrixes: false
+    }
+  );
 }
 
 async function start() {
   if (running) return;
 
   startButton.disabled = true;
-  status.textContent = "Starting...";
+  status.textContent = "Starting camera...";
 
   try {
     if (!renderer) initScene();
-    if (!handTracker || !faceTracker) await loadModels();
+
+    if (!handTracker || !faceTracker) {
+      await loadModels();
+    }
 
     stream = await navigator.mediaDevices.getUserMedia({
-      audio:false,
-      video:{
-        facingMode:"user",
-        width:{ideal:320},
-        height:{ideal:240},
-        frameRate:{ideal:24,max:24}
+      audio: false,
+      video: {
+        facingMode: "user",
+        width: { ideal: 320 },
+        height: { ideal: 240 },
+        frameRate: { ideal: 24, max: 24 }
       }
     });
 
@@ -310,10 +437,18 @@ async function start() {
     running = true;
     stopButton.disabled = false;
     status.textContent = "Tracking active";
+
+    lastVideoTime = -1;
+    lastHandTime = 0;
+    lastFaceTime = 0;
+
     requestAnimationFrame(loop);
-  } catch (err) {
-    console.error(err);
-    status.textContent = "Camera/model error. Check permissions and internet.";
+  } catch (error) {
+    console.error(error);
+
+    status.textContent =
+      "Could not start. Check camera permissions and internet.";
+
     startButton.disabled = false;
   }
 }
@@ -324,14 +459,18 @@ function stop() {
   face = null;
 
   if (stream) {
-    stream.getTracks().forEach(t=>t.stop());
+    stream.getTracks().forEach(track => track.stop());
     stream = null;
   }
+
   video.srcObject = null;
 
-  if (window.joints) window.joints.count = 0;
-  if (window.bones) window.bones.count = 0;
-  if (window.faceLines) window.faceLines.geometry.setDrawRange(0,0);
+  if (window.handJoints) window.handJoints.count = 0;
+  if (window.handBones) window.handBones.count = 0;
+
+  if (window.faceLines) {
+    window.faceLines.geometry.setDrawRange(0, 0);
+  }
 
   startButton.disabled = false;
   stopButton.disabled = true;
@@ -341,52 +480,60 @@ function stop() {
 function loop(now) {
   if (!running) return;
 
-  // Render every animation frame, independently of tracking.
-  renderer.render(scene,camera);
+  // Render continuously, independently of the tracking rate.
+  renderer.render(scene, camera);
   frames++;
 
-  // Avoid duplicate inference on the same camera frame.
-  if (!busy && video.readyState >= 2 &&
-      video.currentTime !== lastVideoTime) {
+  if (
+    !busy &&
+    video.readyState >= 2 &&
+    video.currentTime !== lastVideoTime
+  ) {
+    const updateHands = now - lastHandTime >= HAND_INTERVAL;
+    const updateFace = now - lastFaceTime >= FACE_INTERVAL;
 
-    const doHands = now-lastHandTime >= 100;
-    const doFace = now-lastFaceTime >= 250;
-
-    if (doHands || doFace) {
+    if (updateHands || updateFace) {
       busy = true;
       lastVideoTime = video.currentTime;
 
       try {
-        // Each model has its own update interval.
-        if (doHands) {
+        if (updateHands) {
           lastHandTime = now;
-          const result = handTracker.detectForVideo(video,now);
+
+          const result = handTracker.detectForVideo(video, now);
           hands = result.landmarks || [];
-          handResultsTime = now;
+
           drawHands();
         }
 
-        if (doFace) {
+        if (updateFace) {
           lastFaceTime = now;
-          const result = faceTracker.detectForVideo(video,now);
+
+          const result = faceTracker.detectForVideo(video, now);
           face = result.faceLandmarks?.[0] || null;
-          faceResultsTime = now;
+
           drawFace();
         }
 
-        status.textContent =
-          (hands.length ? "Hand detected" : "Show a hand") +
-          " • " + (face ? "Face detected" : "Face not detected");
-      } catch (err) {
-        console.error("Tracking failed:",err);
+        const handText = hands.length
+          ? `${hands.length} hand(s) detected`
+          : "No hands detected";
+
+        const faceText = face
+          ? "face detected"
+          : "face not detected";
+
+        status.textContent = `${handText} • ${faceText}`;
+      } catch (error) {
+        console.error("Tracking error:", error);
       } finally {
         busy = false;
       }
     }
   }
 
-  if (now-lastFPS >= 1000) {
-    stats.textContent = "FPS: " + frames;
+  if (now - lastFPS >= 1000) {
+    stats.textContent = `FPS: ${frames}`;
     frames = 0;
     lastFPS = now;
   }
@@ -394,12 +541,12 @@ function loop(now) {
   requestAnimationFrame(loop);
 }
 
-startButton.addEventListener("click",start);
-stopButton.addEventListener("click",stop);
-window.addEventListener("pagehide",stop);
+startButton.addEventListener("click", start);
+stopButton.addEventListener("click", stop);
+window.addEventListener("pagehide", stop);
 
 initScene();
-renderer.render(scene,camera);
+renderer.render(scene, camera);
 </script>
 </body>
 </html>
